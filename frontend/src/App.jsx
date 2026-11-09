@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, AlertTriangle, ArrowDownLeft, ArrowUpRight, BarChart3, Bell,
   Boxes, Check, ChevronDown, CircleHelp, Command, Download, LayoutDashboard,
@@ -41,6 +41,9 @@ function App(){
   const [toast,setToast]=useState('');
   const [mobileNav,setMobileNav]=useState(false);
   const [busy,setBusy]=useState(false);
+  const loadInFlight=useRef(null);
+  const refreshQueued=useRef(false);
+  const syncChannel=useRef(null);
 
   const demoFallback=()=>{setProducts(initialProducts);setMoves(initialMoves);setSummary(calc(initialProducts));setIntelligence(null);setLoading(false);};
   function calc(list){
@@ -50,20 +53,87 @@ function App(){
       stock_value:list.reduce((a,p)=>a+Number(p.quantity)*Number(p.unit_cost||0),0)};
   }
   async function request(path,opts={}){
-    const res=await fetch(`${API}${path}`,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});
+    const res=await fetch(`${API}${path}`,{...opts,cache:'no-store',headers:{'Content-Type':'application/json','Cache-Control':'no-cache',...(opts.headers||{})}});
     const data=await res.json().catch(()=>({}));
     if(!res.ok) throw new Error(data.error||'Something went wrong. Please try again.');
     return data;
   }
-  async function load(){
-    setLoading(true);setApiError('');
-    try{
-      const [p,m,d,st,ix]=await Promise.all([request('/products'),request('/movements?limit=8'),request('/dashboard'),request('/settings'),request('/intelligence')]);
-      setProducts(p.products);setMoves(m.movements);setSummary(d);setSettings(st.settings);setIntelligence(ix);
-    }catch(e){setApiError(e.message);demoFallback();}
-    finally{setLoading(false);}
+  async function load({silent=false}={}){
+    // Reuse an in-flight request so focus, polling and user actions do not
+    // trigger overlapping refreshes or race to update the same state.
+    if(loadInFlight.current){
+      if(silent)refreshQueued.current=true;
+      return loadInFlight.current;
+    }
+    if(!silent)setLoading(true);
+    setApiError('');
+    const task=(async()=>{
+      try{
+        const [p,m,d,st,ix]=await Promise.all([request('/products'),request('/movements?limit=8'),request('/dashboard'),request('/settings'),request('/intelligence')]);
+        setProducts(p.products);setMoves(m.movements);setSummary(d);setSettings(st.settings);setIntelligence(ix);
+      }catch(e){
+        setApiError(e.message);
+        // Only use illustrative fallback data during the initial load.
+        // A temporary background failure must not overwrite real records.
+        if(!silent)demoFallback();
+      }finally{
+        if(!silent)setLoading(false);
+      }
+    })();
+    loadInFlight.current=task;
+    try{return await task;}
+    finally{
+      loadInFlight.current=null;
+      if(refreshQueued.current){
+        refreshQueued.current=false;
+        queueMicrotask(()=>load({silent:true}));
+      }
+    }
   }
-  useEffect(()=>{load();},[]);
+  function broadcastDataChange(){
+    const message={type:'mobistock:data-changed',timestamp:Date.now()};
+    if(syncChannel.current){
+      syncChannel.current.postMessage(message);
+    }else{
+      // Storage events provide a fallback in browsers without BroadcastChannel.
+      try{localStorage.setItem('mobistock:data-changed',String(message.timestamp));}catch{}
+    }
+  }
+  useEffect(()=>{
+    load();
+    const refreshIfVisible=()=>{
+      if(document.visibilityState==='visible')load({silent:true});
+    };
+    const onCrossTabChange=(event)=>{
+      if(event?.data?.type==='mobistock:data-changed'&&document.visibilityState==='visible')load({silent:true});
+    };
+    const onStorageChange=(event)=>{
+      if(event.key==='mobistock:data-changed'&&document.visibilityState==='visible')load({silent:true});
+    };
+    if('BroadcastChannel' in window){
+      syncChannel.current=new BroadcastChannel('mobistock-sync');
+      syncChannel.current.addEventListener('message',onCrossTabChange);
+    }
+    window.addEventListener('storage',onStorageChange);
+    const interval=window.setInterval(refreshIfVisible,10000);
+    window.addEventListener('focus',refreshIfVisible);
+    window.addEventListener('pageshow',refreshIfVisible);
+    window.addEventListener('online',refreshIfVisible);
+    document.addEventListener('visibilitychange',refreshIfVisible);
+    return()=>{
+      window.clearInterval(interval);
+      window.removeEventListener('storage',onStorageChange);
+      if(syncChannel.current){
+        syncChannel.current.removeEventListener('message',onCrossTabChange);
+        syncChannel.current.close();
+        syncChannel.current=null;
+      }
+      window.removeEventListener('focus',refreshIfVisible);
+      window.removeEventListener('pageshow',refreshIfVisible);
+      window.removeEventListener('online',refreshIfVisible);
+      document.removeEventListener('visibilitychange',refreshIfVisible);
+    };
+  },[]);
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),3000);return()=>clearTimeout(t);},[toast]);
 
   const lowItems=products.filter(p=>p.quantity>0&&p.quantity<=p.min_stock);
@@ -81,6 +151,7 @@ function App(){
       if(apiError) throw new Error('The API is not connected yet. Start the backend and configure the database before saving.');
       if(form.id) await request(`/products/${form.id}`,{method:'PUT',body:JSON.stringify(form)});
       else await request('/products',{method:'POST',body:JSON.stringify(form)});
+      broadcastDataChange();
       await load();setModal(null);notify(form.id?'Product updated':'Product added successfully');
     }catch(e){notify(e.message);}finally{setBusy(false);}
   }
@@ -89,6 +160,7 @@ function App(){
     try{
       if(apiError) throw new Error('The API is not connected yet. Start the backend and configure the database before recording movements.');
       await request('/movements',{method:'POST',body:JSON.stringify(form)});
+      broadcastDataChange();
       await load();setModal(null);notify('Stock movement recorded');
     }catch(e){notify(e.message);}finally{setBusy(false);}
   }
@@ -97,13 +169,14 @@ function App(){
     try{
       const result=await request('/settings',{method:'PUT',body:JSON.stringify(form)});
       setSettings(result.settings);
+      broadcastDataChange();
       notify('Workspace settings updated');
     }catch(e){notify(e.message);}
     finally{setBusy(false);}
   }
   async function resetDemo(){
     if(!confirm('Restore the starter product catalogue and movement history? Current records will be replaced.'))return;
-    try{await request('/demo/reset',{method:'POST'});await load();notify('Starter records restored');}
+    try{await request('/demo/reset',{method:'POST'});broadcastDataChange();await load();notify('Starter records restored');}
     catch(e){notify(e.message);}
   }
   const nav=[
