@@ -427,3 +427,20 @@ tbody tr:hover{background:#f6f8f1}
 @media(max-width:1150px){.overview-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:850px){.overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-metrics .metric-card:last-child{grid-column:1/-1;width:calc(50% - 4px);justify-self:center}}
 @media(max-width:420px){.overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.overview-metrics .metric-card{padding:13px 11px;min-height:124px}.overview-metrics .metric-top{font-size:8px}.overview-metrics .metric-icon{width:29px;height:29px}.overview-metrics .metric-value{font-size:20px}.overview-metrics .metric-foot{font-size:7px}}
+
+
+/* Final mobile refinement: remove non-informational hero bars and give KPI
+   cards enough width to remain readable on narrow phone screens. */
+.hero-bars{display:none!important}
+@media(max-width:700px){
+  .overview-metrics{grid-template-columns:minmax(0,1fr)!important;gap:10px}
+  .overview-metrics .metric-card{width:100%!important;min-height:116px;padding:15px 16px}
+  .overview-metrics .metric-card:last-child{grid-column:auto!important;width:100%!important;justify-self:stretch}
+  .overview-metrics .metric-top{font-size:10px}
+  .overview-metrics .metric-value{font-size:25px}
+  .overview-metrics .metric-foot{font-size:8px}
+}
+@media(min-width:701px) and (max-width:850px){
+  .overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .overview-metrics .metric-card:last-child{grid-column:1/-1;width:calc(50% - 4px);justify-self:center}
+}

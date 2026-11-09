@@ -244,7 +244,6 @@ function Overview({summary,intelligence,products,moves,lowItems,outItems,setPage
         <div className="hero-ring"><div className="hero-ring-inner"><Boxes size={29}/><b>{fmt(summary.total_units)}</b><small>UNITS ON HAND</small></div></div>
         <div className="hero-float float-a"><span className="float-dot green"/> {healthy} healthy lines</div>
         <div className="hero-float float-b"><span className="float-dot amber"/> {lowItems.length+outItems.length} need attention</div>
-        <div className="hero-bars"><i/><i/><i/><i/><i/><i/><i/><i/><i/></div>
       </div>
       <div className="hero-bottom"><span>INVENTORY HEALTH</span><div className="hero-health-track"><i style={{width:`${healthPct}%`}}/></div><b>{healthPct}%</b><small>products above minimum stock</small></div>
     </section>
