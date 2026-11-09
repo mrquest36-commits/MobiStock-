@@ -222,8 +222,8 @@ function App(){
     {toast&&<div className="toast"><Check size={16}/>{toast}</div>}
   </div>;
 }
-function Metric({label,value,detail,icon:Icon,tone='navy',trend}){
-  return <div className={`metric-card tone-${tone}`}><div className="metric-top"><span>{label}</span><span className="metric-icon"><Icon size={18}/></span></div><div className="metric-value">{fmt(value)}</div><div className="metric-foot"><span>{detail}</span>{trend&&<b>{trend}</b>}</div></div>;
+function Metric({label,value,displayValue,detail,icon:Icon,tone='navy',trend}){
+  return <div className={`metric-card tone-${tone}`}><div className="metric-top"><span>{label}</span><span className="metric-icon"><Icon size={18}/></span></div><div className="metric-value">{displayValue??fmt(value)}</div><div className="metric-foot"><span>{detail}</span>{trend&&<b>{trend}</b>}</div></div>;
 }
 function Status({p}){let t=p.quantity===0?'Out of stock':p.quantity<=p.min_stock?'Low stock':'In stock';return <span className={`status ${p.quantity===0?'out':p.quantity<=p.min_stock?'low':'good'}`}><i/>{t}</span>}
 function Overview({summary,intelligence,products,moves,lowItems,outItems,setPage,setModal,shopName}){
@@ -248,11 +248,12 @@ function Overview({summary,intelligence,products,moves,lowItems,outItems,setPage
       </div>
       <div className="hero-bottom"><span>INVENTORY HEALTH</span><div className="hero-health-track"><i style={{width:`${healthPct}%`}}/></div><b>{healthPct}%</b><small>products above minimum stock</small></div>
     </section>
-    <div className="metric-grid">
-      <Metric label="Products tracked" value={summary.product_count} detail="Active product records" icon={Package} tone="navy"/>
-      <Metric label="Units in stock" value={summary.total_units} detail="Across all products" icon={Boxes} tone="blue"/>
+    <div className="metric-grid overview-metrics">
+      <Metric label="Products tracked" value={summary.product_count} detail="Registered product records" icon={Package} tone="navy"/>
+      <Metric label="Inventory value" value={summary.stock_value} displayValue={money(summary.stock_value)} detail="Current stock at recorded cost" icon={BarChart3} tone="green"/>
       <Metric label="Low-stock items" value={summary.low_stock_count} detail="At or below minimum" icon={AlertTriangle} tone="amber"/>
-      <Metric label="Out of stock" value={summary.out_of_stock_count} detail="Replenishment required" icon={Bell} tone="red"/>
+      <Metric label="Out of stock" value={summary.out_of_stock_count} detail="No units remaining" icon={Bell} tone="red"/>
+      <Metric label="Units on hand" value={summary.total_units} detail="Current recorded stock quantity" icon={Boxes} tone="blue"/>
     </div>
     <section className="intelligence-stage">
       <div className="intelligence-stage-head">
